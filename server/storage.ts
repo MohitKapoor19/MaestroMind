@@ -6,6 +6,7 @@ import {
   executionPlans,
   systemLogs,
   fileUploads,
+  n8nWorkflows,
   type Task,
   type InsertTask,
   type Agent,
@@ -17,6 +18,8 @@ import {
   type SystemLog,
   type InsertSystemLog,
   type FileUpload,
+  type N8nWorkflow,
+  type InsertN8nWorkflow,
   type TaskWithAgents,
   type AgentWithExecutions,
 } from "@shared/schema";
@@ -69,6 +72,13 @@ export interface IStorage {
   createFileUpload(file: Omit<FileUpload, 'id' | 'uploadedAt'>): Promise<FileUpload>;
   getFilesByTask(taskId: string): Promise<FileUpload[]>;
   updateFileUpload(id: string, updates: Partial<FileUpload>): Promise<FileUpload>;
+
+  // n8n Workflow operations
+  createN8nWorkflow(workflow: Omit<N8nWorkflow, 'id' | 'createdAt' | 'updatedAt'>): Promise<N8nWorkflow>;
+  getN8nWorkflow(id: string): Promise<N8nWorkflow | null>;
+  getN8nWorkflowsByTask(taskId: string): Promise<N8nWorkflow[]>;
+  updateN8nWorkflow(id: string, updates: Partial<N8nWorkflow>): Promise<N8nWorkflow | null>;
+  deleteN8nWorkflow(id: string): Promise<boolean>;
 
   // Analytics operations
   getTaskMetrics(): Promise<{
@@ -373,6 +383,39 @@ export class DatabaseStorage implements IStorage {
       totalExecutions: executionMetrics.totalExecutions,
       totalCost: Math.round((executionMetrics.totalCost || 0) * 1000000) / 1000000, // round to 6 decimal places
     };
+  }
+
+  // n8n Workflow operations
+  async createN8nWorkflow(workflow: Omit<N8nWorkflow, 'id' | 'createdAt' | 'updatedAt'>): Promise<N8nWorkflow> {
+    const [newWorkflow] = await db.insert(n8nWorkflows).values(workflow).returning();
+    return newWorkflow;
+  }
+
+  async getN8nWorkflow(id: string): Promise<N8nWorkflow | null> {
+    const [workflow] = await db.select().from(n8nWorkflows).where(eq(n8nWorkflows.id, id));
+    return workflow || null;
+  }
+
+  async getN8nWorkflowsByTask(taskId: string): Promise<N8nWorkflow[]> {
+    return await db
+      .select()
+      .from(n8nWorkflows)
+      .where(eq(n8nWorkflows.taskId, taskId))
+      .orderBy(desc(n8nWorkflows.updatedAt));
+  }
+
+  async updateN8nWorkflow(id: string, updates: Partial<N8nWorkflow>): Promise<N8nWorkflow | null> {
+    const [updatedWorkflow] = await db
+      .update(n8nWorkflows)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(n8nWorkflows.id, id))
+      .returning();
+    return updatedWorkflow || null;
+  }
+
+  async deleteN8nWorkflow(id: string): Promise<boolean> {
+    const result = await db.delete(n8nWorkflows).where(eq(n8nWorkflows.id, id));
+    return result.rowCount > 0;
   }
 }
 

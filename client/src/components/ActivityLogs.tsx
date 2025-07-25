@@ -50,7 +50,7 @@ export default function ActivityLogs({ taskId, agentId }: ActivityLogsProps) {
     }));
   }, [taskId, agentId]);
 
-  const filteredLogs = logs?.filter(log => 
+  const filteredLogs = logs?.filter((log: any) => 
     !searchTerm || 
     log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.category.toLowerCase().includes(searchTerm.toLowerCase())
@@ -159,14 +159,14 @@ export default function ActivityLogs({ taskId, agentId }: ActivityLogsProps) {
             </div>
 
             {/* Level Filter */}
-            <Select value={filters.level || ''} onValueChange={(value) => 
-              setFilters(prev => ({ ...prev, level: value || undefined }))
+            <Select value={filters.level || 'all'} onValueChange={(value) => 
+              setFilters(prev => ({ ...prev, level: value === 'all' ? undefined : value }))
             }>
               <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
                 <SelectValue placeholder="All levels" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All levels</SelectItem>
+                <SelectItem value="all">All levels</SelectItem>
                 <SelectItem value="error">Error</SelectItem>
                 <SelectItem value="warn">Warning</SelectItem>
                 <SelectItem value="info">Info</SelectItem>
@@ -175,14 +175,14 @@ export default function ActivityLogs({ taskId, agentId }: ActivityLogsProps) {
             </Select>
 
             {/* Category Filter */}
-            <Select value={filters.category || ''} onValueChange={(value) => 
-              setFilters(prev => ({ ...prev, category: value || undefined }))
+            <Select value={filters.category || 'all'} onValueChange={(value) => 
+              setFilters(prev => ({ ...prev, category: value === 'all' ? undefined : value }))
             }>
               <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All categories</SelectItem>
+                <SelectItem value="all">All categories</SelectItem>
                 <SelectItem value="agent">Agent</SelectItem>
                 <SelectItem value="task">Task</SelectItem>
                 <SelectItem value="api">API</SelectItem>
@@ -248,7 +248,7 @@ export default function ActivityLogs({ taskId, agentId }: ActivityLogsProps) {
               </div>
             ) : filteredLogs.length > 0 ? (
               <div className="space-y-1 p-4">
-                {filteredLogs.map((log) => (
+                {filteredLogs.map((log: any) => (
                   <div
                     key={log.id}
                     className={cn(

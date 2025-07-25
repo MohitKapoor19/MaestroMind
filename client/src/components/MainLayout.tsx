@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Brain, ChartLine, Plus, Users, CheckSquare, BarChart3, FileText, Search, Bell } from 'lucide-react';
+import { Brain, ChartLine, Plus, Users, CheckSquare, BarChart3, FileText, Search, Bell, Workflow } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,12 @@ export default function MainLayout({ children, activeTab, onTabChange }: MainLay
       label: 'Agent Network',
       icon: Users,
       description: 'Visualize agent collaboration',
+    },
+    {
+      id: 'workflow' as TabType,
+      label: 'n8n Workflows',
+      icon: Workflow,
+      description: 'Automate task execution',
     },
     {
       id: 'output' as TabType,

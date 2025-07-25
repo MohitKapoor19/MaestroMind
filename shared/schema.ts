@@ -256,3 +256,48 @@ export type RealtimeUpdate = {
   data: any;
   timestamp: string;
 };
+
+// Task creation request type
+export type TaskCreationRequest = {
+  title: string;
+  description: string;
+  priority: string;
+  status?: string;
+  estimatedDuration?: string;
+  metadata?: any;
+  files?: FileUploadData[];
+};
+
+export type FileUploadData = {
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  path: string;
+};
+
+// n8n Workflow schema
+export const n8nWorkflows = pgTable("n8n_workflows", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: uuid("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  workflowData: jsonb("workflow_data").notNull(),
+  nodes: jsonb("nodes").notNull(),
+  connections: jsonb("connections").notNull(),
+  settings: jsonb("settings"),
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  name: text("name").notNull(),
+  description: text("description"),
+  version: integer("version").default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const n8nWorkflowsRelations = relations(n8nWorkflows, ({ one }) => ({
+  task: one(tasks, {
+    fields: [n8nWorkflows.taskId],
+    references: [tasks.id],
+  }),
+}));
+
+export type N8nWorkflow = typeof n8nWorkflows.$inferSelect;
+export type InsertN8nWorkflow = typeof n8nWorkflows.$inferInsert;

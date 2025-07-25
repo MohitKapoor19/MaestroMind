@@ -5,6 +5,7 @@ import AgentNetwork from '@/components/AgentNetwork';
 import OutputCanvas from '@/components/OutputCanvas';
 import ActivityLogs from '@/components/ActivityLogs';
 import AgentInspector from '@/components/AgentInspector';
+import N8nWorkflowBuilder from '@/components/N8nWorkflowBuilder';
 import type { TabType } from '@/lib/types';
 
 export default function Dashboard() {
@@ -32,6 +33,14 @@ export default function Dashboard() {
             selectedTaskId={selectedTaskId}
             onAgentSelect={handleAgentSelected}
             onTaskSelect={setSelectedTaskId}
+          />
+        );
+      case 'workflow':
+        return (
+          <N8nWorkflowBuilder 
+            taskId={selectedTaskId}
+            onSave={(workflow) => console.log('Saving workflow:', workflow)}
+            onExecute={(workflow) => console.log('Executing workflow:', workflow)}
           />
         );
       case 'output':

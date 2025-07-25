@@ -23,6 +23,11 @@ export function useWebSocket({
 
   const connect = useCallback(() => {
     try {
+      // Clear any existing connection first
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        wsRef.current.close();
+      }
+      
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/ws`;
       
@@ -52,7 +57,7 @@ export function useWebSocket({
 
         // Attempt to reconnect if not manually closed
         if (reconnectAttempts.current < maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+          const delay = Math.min(1000 * (reconnectAttempts.current + 1), 10000);
           console.log(`Attempting to reconnect in ${delay}ms...`);
           
           reconnectTimeoutRef.current = setTimeout(() => {

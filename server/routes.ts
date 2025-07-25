@@ -4,8 +4,9 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { taskService } from "./services/taskService";
 import { agentService } from "./services/agentService";
+import { n8nService } from "./services/n8nService";
 import { insertTaskSchema, insertAgentSchema } from "@shared/schema";
-import type { RealtimeUpdate } from "@shared/schema";
+import type { RealtimeUpdate, TaskCreationRequest, FileUploadData } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import { promises as fs } from "fs";
@@ -36,9 +37,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   // Setup WebSocket server
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const wss = new WebSocketServer({ 
+    server: httpServer, 
+    path: '/ws',
+    clientTracking: true,
+    perMessageDeflate: false
+  });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     console.log('WebSocket client connected');
     wsClients.add(ws);
 
@@ -47,11 +53,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       wsClients.delete(ws);
     });
 
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      wsClients.delete(ws);
+    });
+
     // Send initial connection confirmation
-    ws.send(JSON.stringify({
-      type: 'connection',
-      data: { status: 'connected', timestamp: new Date().toISOString() },
-    }));
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'connection',
+        data: { status: 'connected', timestamp: new Date().toISOString() },
+      }));
+    }
   });
 
   // API Routes
@@ -106,8 +119,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const taskData = insertTaskSchema.parse(req.body);
       
       // Handle uploaded files
-      const files = req.files as Express.Multer.File[] || [];
-      const fileData = await Promise.all(files.map(async (file) => {
+      const files = (req.files as Express.Multer.File[]) || [];
+      const fileData: FileUploadData[] = await Promise.all(files.map(async (file) => {
         const newPath = path.join('uploads', `${Date.now()}-${file.originalname}`);
         await fs.rename(file.path, newPath);
         
@@ -120,10 +133,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }));
 
-      const task = await taskService.createTask({
+      const taskRequest: TaskCreationRequest = {
         ...taskData,
+        priority: taskData.priority || 'medium',
         files: fileData,
-      });
+      };
+
+      const task = await taskService.createTask(taskRequest);
 
       // Broadcast real-time update
       broadcastUpdate({
@@ -167,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/agents', async (req, res) => {
     try {
       const { taskId } = req.query;
-      let agents;
+      let agents: any[] = [];
       
       if (taskId) {
         agents = await storage.getAgentsByTask(taskId as string);
@@ -344,6 +360,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'unhealthy',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+    }
+  });
+
+  // n8n Workflow routes
+  app.post('/api/workflows', async (req, res) => {
+    try {
+      const workflow = await n8nService.createWorkflow(req.body);
+      res.json(workflow);
+    } catch (error) {
+      console.error('Failed to create workflow:', error);
+      res.status(500).json({ message: 'Failed to create workflow' });
+    }
+  });
+
+  app.get('/api/workflows', async (req, res) => {
+    try {
+      const { taskId } = req.query;
+      let workflows;
+      
+      if (taskId) {
+        workflows = await n8nService.getWorkflowsByTask(taskId as string);
+      } else {
+        workflows = [];
+      }
+      
+      res.json(workflows);
+    } catch (error) {
+      console.error('Failed to get workflows:', error);
+      res.status(500).json({ message: 'Failed to get workflows' });
+    }
+  });
+
+  app.get('/api/workflows/:id', async (req, res) => {
+    try {
+      const workflow = await n8nService.getWorkflow(req.params.id);
+      if (!workflow) {
+        return res.status(404).json({ message: 'Workflow not found' });
+      }
+      res.json(workflow);
+    } catch (error) {
+      console.error('Failed to get workflow:', error);
+      res.status(500).json({ message: 'Failed to get workflow' });
+    }
+  });
+
+  app.put('/api/workflows/:id', async (req, res) => {
+    try {
+      const workflow = await n8nService.updateWorkflow(req.params.id, req.body);
+      if (!workflow) {
+        return res.status(404).json({ message: 'Workflow not found' });
+      }
+      res.json(workflow);
+    } catch (error) {
+      console.error('Failed to update workflow:', error);
+      res.status(500).json({ message: 'Failed to update workflow' });
+    }
+  });
+
+  app.delete('/api/workflows/:id', async (req, res) => {
+    try {
+      const success = await n8nService.deleteWorkflow(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: 'Workflow not found' });
+      }
+      res.json({ message: 'Workflow deleted successfully' });
+    } catch (error) {
+      console.error('Failed to delete workflow:', error);
+      res.status(500).json({ message: 'Failed to delete workflow' });
+    }
+  });
+
+  app.post('/api/workflows/:id/execute', async (req, res) => {
+    try {
+      const result = await n8nService.executeWorkflow(req.params.id);
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to execute workflow:', error);
+      res.status(500).json({ message: 'Failed to execute workflow' });
+    }
+  });
+
+  app.post('/api/workflows/validate', async (req, res) => {
+    try {
+      const validation = await n8nService.validateWorkflow(req.body);
+      res.json(validation);
+    } catch (error) {
+      console.error('Failed to validate workflow:', error);
+      res.status(500).json({ message: 'Failed to validate workflow' });
     }
   });
 

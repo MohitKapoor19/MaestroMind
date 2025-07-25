@@ -56,6 +56,16 @@ Preferred communication style: Simple, everyday language.
 - Performance metrics tracking
 - System health monitoring
 
+### n8n Workflow Integration
+- Visual workflow builder with drag-and-drop interface
+- Node-based automation system supporting multiple node types:
+  - HTTP Request, Webhook, Schedule Trigger
+  - Database operations, Email, File handling
+  - Code execution, AI Agent integration
+- Workflow validation and execution engine
+- Task-specific workflow association
+- Real-time workflow status monitoring
+
 ### File Management
 - Upload handling with size and type validation
 - File association with tasks and agents
@@ -68,7 +78,8 @@ Preferred communication style: Simple, everyday language.
 3. **Execution Planning**: Agents collaborate to create execution strategy
 4. **Task Execution**: Agents work collaboratively with real-time updates
 5. **Result Compilation**: Final outputs are aggregated and presented
-6. **Monitoring**: All activities logged and broadcasted via WebSocket
+6. **Workflow Automation**: n8n-style visual workflows for task automation
+7. **Monitoring**: All activities logged and broadcasted via WebSocket
 
 ## External Dependencies
 
