@@ -1,6 +1,8 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { serviceManager } from "./services/serviceManager";
 import multer from "multer";
 import path from "path";
 import { promises as fs } from "fs";
@@ -44,6 +46,21 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize all services before starting server
+  try {
+    log('🚀 Initializing MaestroMind services...');
+    await serviceManager.initialize();
+    
+    // Create default budgets and queues
+    await serviceManager.createDefaultBudgets();
+    await serviceManager.createDefaultQueues();
+    
+    log('✅ Service initialization complete');
+  } catch (error) {
+    log(`❌ Service initialization failed: ${error}`);
+    process.exit(1);
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -68,11 +85,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  server.listen(port, () => {
     log(`serving on port ${port}`);
   });
 })();
