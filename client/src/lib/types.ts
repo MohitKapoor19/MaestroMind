@@ -107,4 +107,4 @@ export interface LogFilter {
   limit?: number;
 }
 
-export type TabType = 'create' | 'network' | 'workflow' | 'output' | 'logs' | 'inspector';
+export type TabType = 'create' | 'network' | 'workflow' | 'output' | 'logs' | 'inspector' | 'queue' | 'budget' | 'timeline' | 'templates';

@@ -11,6 +11,7 @@ import { errorRecoveryService } from "./services/errorRecoveryService";
 import { templateService } from "./services/templateService";
 import { timelineService } from "./services/timelineService";
 import { serviceManager } from "./services/serviceManager";
+import { pdfExportService } from "./services/pdfExportService";
 import { 
   insertTaskSchema, 
   insertAgentSchema,
@@ -132,6 +133,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ initialized: serviceManager.isInitialized() });
     } catch (error) {
       res.json({ initialized: false });
+    }
+  });
+
+  // Search endpoint
+  app.get('/api/search', async (req, res) => {
+    try {
+      const { 
+        q: query, 
+        types, 
+        status, 
+        start, 
+        end, 
+        limit = '20' 
+      } = req.query;
+
+      if (!query || typeof query !== 'string' || query.trim().length < 2) {
+        return res.json([]);
+      }
+
+      const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
+      const results: any[] = [];
+      const maxResults = parseInt(limit as string, 10) || 20;
+
+      // Parse filters
+      const typeFilter = types ? (types as string).split(',') : ['task', 'agent', 'log', 'template'];
+      const statusFilter = status ? (status as string).split(',') : [];
+      const dateStart = start ? new Date(start as string) : null;
+      const dateEnd = end ? new Date(end as string) : null;
+
+      // Search tasks
+      if (typeFilter.includes('task')) {
+        const tasks = await storage.getAllTasks();
+        for (const task of tasks) {
+          if (statusFilter.length > 0 && !statusFilter.includes(task.status)) continue;
+          if (dateStart && new Date(task.createdAt) < dateStart) continue;
+          if (dateEnd && new Date(task.createdAt) > dateEnd) continue;
+
+          let relevance = 0;
+          const titleLower = task.title.toLowerCase();
+          const descLower = task.description?.toLowerCase() || '';
+
+          // Calculate relevance score
+          for (const term of searchTerms) {
+            if (titleLower.includes(term)) relevance += 0.8;
+            if (descLower.includes(term)) relevance += 0.4;
+            if (task.status.toLowerCase().includes(term)) relevance += 0.6;
+          }
+
+          if (relevance > 0) {
+            results.push({
+              id: task.id,
+              type: 'task',
+              title: task.title,
+              description: task.description,
+              metadata: { status: task.status, priority: task.priority },
+              relevance
+            });
+          }
+        }
+      }
+
+      // Search agents
+      if (typeFilter.includes('agent')) {
+        const agents = await storage.getAllAgents();
+        for (const agent of agents) {
+          if (statusFilter.length > 0 && !statusFilter.includes(agent.status || 'unknown')) continue;
+
+          let relevance = 0;
+          const nameLower = agent.name?.toLowerCase() || '';
+          const roleLower = agent.role?.toLowerCase() || '';
+          const descLower = agent.description?.toLowerCase() || '';
+
+          for (const term of searchTerms) {
+            if (nameLower.includes(term)) relevance += 0.8;
+            if (roleLower.includes(term)) relevance += 0.6;
+            if (descLower.includes(term)) relevance += 0.4;
+          }
+
+          if (relevance > 0) {
+            results.push({
+              id: agent.id,
+              type: 'agent',
+              title: agent.name || 'Unnamed Agent',
+              description: `${agent.role} - ${agent.description}`,
+              metadata: { role: agent.role, status: agent.status },
+              relevance
+            });
+          }
+        }
+      }
+
+      // Search logs
+      if (typeFilter.includes('log')) {
+        const logs = await storage.getSystemLogs({ limit: 200 });
+        for (const log of logs) {
+          if (statusFilter.length > 0 && !statusFilter.includes(log.level)) continue;
+          if (dateStart && new Date(log.timestamp) < dateStart) continue;
+          if (dateEnd && new Date(log.timestamp) > dateEnd) continue;
+
+          let relevance = 0;
+          const messageLower = log.message.toLowerCase();
+          const categoryLower = log.category?.toLowerCase() || '';
+
+          for (const term of searchTerms) {
+            if (messageLower.includes(term)) relevance += 0.6;
+            if (categoryLower.includes(term)) relevance += 0.4;
+            if (log.level.toLowerCase().includes(term)) relevance += 0.3;
+          }
+
+          if (relevance > 0) {
+            results.push({
+              id: log.id,
+              type: 'log',
+              title: log.message.substring(0, 80) + (log.message.length > 80 ? '...' : ''),
+              description: `${log.level} - ${log.category}`,
+              metadata: { level: log.level, category: log.category, timestamp: log.timestamp },
+              relevance
+            });
+          }
+        }
+      }
+
+      // Search templates
+      if (typeFilter.includes('template')) {
+        const templates = await templateService.getAllTemplates();
+        for (const template of templates) {
+          let relevance = 0;
+          const nameLower = template.name.toLowerCase();
+          const descLower = template.description?.toLowerCase() || '';
+          const categoryLower = template.category?.toLowerCase() || '';
+
+          for (const term of searchTerms) {
+            if (nameLower.includes(term)) relevance += 0.8;
+            if (descLower.includes(term)) relevance += 0.4;
+            if (categoryLower.includes(term)) relevance += 0.3;
+          }
+
+          if (relevance > 0) {
+            results.push({
+              id: template.id,
+              type: 'template',
+              title: template.name,
+              description: template.description,
+              metadata: { category: template.category, isPublic: template.isPublic },
+              relevance
+            });
+          }
+        }
+      }
+
+      // Sort by relevance and limit results
+      const sortedResults = results
+        .sort((a, b) => b.relevance - a.relevance)
+        .slice(0, maxResults);
+
+      res.json(sortedResults);
+    } catch (error) {
+      console.error('Search failed:', error);
+      res.status(500).json({ message: 'Search failed', error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -555,7 +715,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Export endpoints for tasks
+  // ===== PDF EXPORT ENDPOINTS =====
+
+  // Enhanced export endpoints with PDF support
+  app.get('/api/tasks/:id/export/:format', async (req, res) => {
+    try {
+      const { format } = req.params;
+      const { includeMetrics, includeAgentDetails, includeTimeline } = req.query;
+      
+      if (!['pdf', 'html', 'markdown', 'md', 'json'].includes(format)) {
+        return res.status(400).json({ message: 'Unsupported format. Use pdf, html, markdown, md, or json' });
+      }
+
+      // For backward compatibility
+      if (format === 'md') {
+        return res.redirect(`/api/tasks/${req.params.id}/export.md`);
+      }
+      if (format === 'json') {
+        return res.redirect(`/api/tasks/${req.params.id}/export.json`);
+      }
+
+      const exportFormat = format === 'markdown' ? 'markdown' : format as 'pdf' | 'html';
+      
+      const options = {
+        format: exportFormat,
+        includeMetrics: includeMetrics !== 'false',
+        includeAgentDetails: includeAgentDetails !== 'false',
+        includeTimeline: includeTimeline === 'true',
+      };
+
+      const exportBuffer = await pdfExportService.exportTaskToPDF(req.params.id, options);
+      
+      const contentTypes = {
+        pdf: 'application/pdf',
+        html: 'text/html',
+        markdown: 'text/markdown',
+      };
+      
+      const fileExtensions = {
+        pdf: 'pdf',
+        html: 'html',
+        markdown: 'md',
+      };
+
+      res.setHeader('Content-Type', contentTypes[exportFormat]);
+      res.setHeader('Content-Disposition', 
+        `attachment; filename="task-${req.params.id}-report.${fileExtensions[exportFormat]}"`);
+      res.send(exportBuffer);
+
+    } catch (error) {
+      console.error('Failed to export task:', error);
+      res.status(500).json({ message: 'Failed to export task', error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get('/api/tasks/:id/export-history', async (req, res) => {
+    try {
+      const history = await pdfExportService.getExportHistory(req.params.id);
+      res.json(history);
+    } catch (error) {
+      console.error('Failed to get export history:', error);
+      res.status(500).json({ message: 'Failed to get export history' });
+    }
+  });
+
+  app.get('/api/export-history', async (req, res) => {
+    try {
+      const history = await pdfExportService.getExportHistory();
+      res.json(history);
+    } catch (error) {
+      console.error('Failed to get global export history:', error);
+      res.status(500).json({ message: 'Failed to get global export history' });
+    }
+  });
+
+  // Legacy export endpoints for backward compatibility
   app.get('/api/tasks/:id/export.md', async (req, res) => {
     try {
       const task = await storage.getTaskWithAgents(req.params.id);

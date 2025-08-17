@@ -3,9 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useTaskStatus } from '@/hooks/useTasks';
-import { FileText, Download, Copy, Eye, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { FileText, Download, Copy, Eye, Clock, CheckCircle, AlertCircle, FilePdf, FileCode2, FileType, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface OutputCanvasProps {
   taskId: string | null;
@@ -13,7 +22,67 @@ interface OutputCanvasProps {
 
 export default function OutputCanvas({ taskId }: OutputCanvasProps) {
   const [selectedSection, setSelectedSection] = useState('overview');
+  const [exportOptions, setExportOptions] = useState({
+    includeMetrics: true,
+    includeAgentDetails: true,
+    includeTimeline: false,
+  });
+  const [isExporting, setIsExporting] = useState(false);
   const { data: taskStatus } = useTaskStatus(taskId || '');
+
+  const handleExport = async (format: 'pdf' | 'html' | 'markdown' | 'json') => {
+    if (!taskId) return;
+
+    setIsExporting(true);
+    try {
+      const queryParams = new URLSearchParams({
+        includeMetrics: exportOptions.includeMetrics.toString(),
+        includeAgentDetails: exportOptions.includeAgentDetails.toString(),
+        includeTimeline: exportOptions.includeTimeline.toString(),
+      });
+
+      const response = await fetch(`/api/tasks/${taskId}/export/${format}?${queryParams}`);
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Export failed');
+      }
+
+      // Get the filename from the response headers
+      const contentDisposition = response.headers.get('content-disposition');
+      const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || `task-${taskId}-report.${format}`;
+
+      // Create download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success(`Export completed: ${filename}`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    if (!taskStatus) return;
+
+    try {
+      const text = `Task: ${taskStatus.task.title}\n\nDescription: ${taskStatus.task.description}\n\nStatus: ${taskStatus.task.status}\n\nProgress: ${taskStatus.task.progress}%`;
+      await navigator.clipboard.writeText(text);
+      toast.success('Task output copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
 
   if (!taskId) {
     return (
@@ -65,16 +134,84 @@ export default function OutputCanvas({ taskId }: OutputCanvasProps) {
           >
             {task.status}
           </Badge>
-          {isCompleted && (
+          {(isCompleted || isInProgress) && (
             <>
-              <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
+              <Button variant="outline" size="sm" onClick={copyToClipboard}>
                 <Copy className="w-4 h-4 mr-2" />
                 Copy Output
               </Button>
-              <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={isExporting}>
+                    <Download className="w-4 h-4 mr-2" />
+                    {isExporting ? 'Exporting...' : 'Export'}
+                    <ChevronDown className="w-3 h-3 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <div className="p-3 space-y-3">
+                    <div className="font-medium text-sm">Export Options</div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="metrics"
+                          checked={exportOptions.includeMetrics}
+                          onCheckedChange={(checked) =>
+                            setExportOptions(prev => ({ ...prev, includeMetrics: !!checked }))
+                          }
+                        />
+                        <label htmlFor="metrics" className="text-sm">Include performance metrics</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="agents"
+                          checked={exportOptions.includeAgentDetails}
+                          onCheckedChange={(checked) =>
+                            setExportOptions(prev => ({ ...prev, includeAgentDetails: !!checked }))
+                          }
+                        />
+                        <label htmlFor="agents" className="text-sm">Include agent details</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="timeline"
+                          checked={exportOptions.includeTimeline}
+                          onCheckedChange={(checked) =>
+                            setExportOptions(prev => ({ ...prev, includeTimeline: !!checked }))
+                          }
+                        />
+                        <label htmlFor="timeline" className="text-sm">Include execution timeline</label>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <DropdownMenuSeparator />
+                  
+                  <DropdownMenuItem onClick={() => handleExport('pdf')} disabled={isExporting}>
+                    <FilePdf className="w-4 h-4 mr-2" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem onClick={() => handleExport('html')} disabled={isExporting}>
+                    <FileCode2 className="w-4 h-4 mr-2" />
+                    Export as HTML
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem onClick={() => handleExport('markdown')} disabled={isExporting}>
+                    <FileType className="w-4 h-4 mr-2" />
+                    Export as Markdown
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem onClick={() => handleExport('json')} disabled={isExporting}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Export as JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </div>

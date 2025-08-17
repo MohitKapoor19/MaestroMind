@@ -6,6 +6,10 @@ import OutputCanvas from '@/components/OutputCanvas';
 import ActivityLogs from '@/components/ActivityLogs';
 import AgentInspector from '@/components/AgentInspector';
 import N8nWorkflowBuilder from '@/components/N8nWorkflowBuilder';
+import TaskQueueManager from '@/components/TaskQueueManager';
+import BudgetDashboard from '@/components/BudgetDashboard';
+import TemplateLibrary from '@/components/TemplateLibrary';
+import TimelineViewer from '@/components/TimelineViewer';
 import type { TabType } from '@/lib/types';
 
 export default function Dashboard() {
@@ -49,6 +53,14 @@ export default function Dashboard() {
         return <ActivityLogs taskId={selectedTaskId} agentId={selectedAgentId} />;
       case 'inspector':
         return <AgentInspector agentId={selectedAgentId} />;
+      case 'queue':
+        return <TaskQueueManager />;
+      case 'budget':
+        return <BudgetDashboard />;
+      case 'timeline':
+        return <TimelineViewer />;
+      case 'templates':
+        return <TemplateLibrary />;
       default:
         return <TaskCreator onTaskCreated={handleTaskCreated} />;
     }
