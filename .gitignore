@@ -5,3 +5,47 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+
+
+# Sonner
+.sonner/
+
+# Editor config
+.editorconfig
+
+# VSCode
+.vscode/
+
+# Next.js
+.next/
+out/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Database
+*.sql
+*.sqlite
+
+# Testing
+/coverage
+
+# Linting
+/.eslintcache
+
+# Build
+/.rpt2_cache/
+
+# CI
+.buildkite/
+/.github/
+
+# Deployment
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
